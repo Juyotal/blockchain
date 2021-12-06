@@ -1,5 +1,8 @@
 
 from backend.blockchain.block import Block
+from backend.wallet.transactions import Transaction
+from backend.config import MINING_REWARD_INPUT
+from backend.wallet.wallet import Wallet
 
 class Blockchain:
     """
@@ -62,6 +65,56 @@ class Blockchain:
             block = chain[i]
             last_block = chain[i-1]
             Block.is_valid_block(last_block, block)
+
+        Blockchain.is_valid_transaction_chain(chain)
+
+    def is_valid_transaction_chain(chain):
+        """
+        Enforce the rules of a chain composed of blocks of transactions.
+            - each transaction must appear once in the chain.
+            - there can only be one mining reward per block.
+            - each transaction must be valid
+        """
+        transaction_ids = set()
+
+        for i in range(len(chain)):
+            block = chain[i]
+            has_mining_reward = False
+
+            for transaction_json in block.data:
+                transaction = Transaction.from_json(transaction_json)
+
+                if transaction.id in transaction_ids:
+                    raise Exception(f'Transaction {transaction.id} is not unique')
+                
+                transaction_ids.add(transaction.id)
+
+                if transaction.input == MINING_REWARD_INPUT:
+                    if has_mining_reward:
+                        raise Exception(
+                            'There can only be one mining reward per Block.' \
+                                f'Check block with hash: {block.hash}'
+                        )
+
+                    has_mining_reward = True
+                
+                else:
+
+                    historic_blockchain = Blockchain()
+                    historic_blockchain.chain = chain[0:i]
+
+                    historic_balance = Wallet.calculate_balance(
+                        historic_blockchain,
+                        transaction.input['address']
+                    )
+                    if historic_balance != transaction.input['amount']:
+                        raise Exception(
+                            f'Transaction {transaction.id} has an invalid '\
+                                'input amount'
+                        )
+
+                Transaction.is_valid_transaction(transaction)
+
 
 def main():
 
